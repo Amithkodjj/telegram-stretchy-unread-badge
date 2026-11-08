@@ -1,0 +1,60 @@
+diff --git a/submodules/ChatListUI/BUILD b/submodules/ChatListUI/BUILD
+index 58a001c6..dbfd2d78 100644
+--- a/submodules/ChatListUI/BUILD
++++ b/submodules/ChatListUI/BUILD
+@@ -115,6 +115,7 @@ swift_library(
+         "//submodules/TelegramUI/Components/ChatEntityKeyboardInputNode",
+         "//submodules/TelegramUI/Components/ListComposePollOptionComponent",
+         "//submodules/ChatPresentationInterfaceState",
++        "//submodules/TelegramUI/Components/StretchyBadge",
+         "//submodules/ShimmerEffect:ShimmerEffect",
+         "//submodules/TelegramUI/Components/LottieComponent",
+         "//submodules/TelegramUI/Components/AvatarUploadToastScreen",
+@@ -126,6 +127,7 @@ swift_library(
+         "//submodules/TelegramUI/Components/ChatList/ChatListFilterTabContainerNode",
+         "//submodules/TelegramUI/Components/HeaderPanelContainerComponent",
+         "//submodules/TelegramUI/Components/HorizontalTabsComponent",
++        "//submodules/TelegramUI/Components/TabBarComponent",
+         "//submodules/TelegramUI/Components/GlobalControlPanelsContext",
+         "//submodules/TelegramUI/Components/MediaPlaybackHeaderPanelComponent",
+         "//submodules/TelegramUI/Components/LiveLocationHeaderPanelComponent",
+diff --git a/submodules/ChatListUI/Sources/Node/ChatListItem.swift b/submodules/ChatListUI/Sources/Node/ChatListItem.swift
+index 6ef509ec..57793e7d 100644
+--- a/submodules/ChatListUI/Sources/Node/ChatListItem.swift
++++ b/submodules/ChatListUI/Sources/Node/ChatListItem.swift
+@@ -29,6 +29,7 @@ import MultilineTextComponent
+ import MultilineTextWithEntitiesComponent
+ import ShimmerEffect
+ import GlassBackgroundComponent
++import StretchyBadge
+ 
+ public enum ChatListItemContent {
+     public final class ThreadInfo: Equatable {
+@@ -1504,6 +1505,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
+     public let separatorNode: ASDisplayNode
+     let statusNode: ChatListStatusNode
+     let badgeNode: ChatListBadgeNode
++    var stretchyBadgeRecognizer: StretchyBadgeDragRecognizer?
++    var stretchyBadgeInfo: (color: UIColor, onPop: () -> Void)?
+     let mentionBadgeNode: ChatListBadgeNode
+     var avatarBadgeNode: ChatListBadgeNode?
+     var avatarBadgeBackground: ASImageNode?
+@@ -1916,6 +1919,10 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
+                 return false
+             }
+             
++            if strongSelf.stretchyBadgeTarget(at: location) != nil {
++                return false
++            }
++
+             strongSelf.contextContainer.additionalActivationProgressLayer = nil
+             if let inlineNavigationLocation = item.interaction.inlineNavigationLocation {
+                 if case let .peer(peerId) = inlineNavigationLocation.location {
+@@ -4855,6 +4862,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
+                     
+                     let rightAccessoryVerticalOffset: CGFloat = floorToScreenPixels(-4.0 * min(1.0, item.presentationData.fontSize.itemListBaseFontSize / 17.0))
+                     var nextBadgeX: CGFloat = contentRect.maxX
++                    strongSelf.updateStretchyBadge(item: item, hasUnread: currentBadgeBackgroundImage != nil, isMuted: isMuted)
+                     if let _ = currentBadgeBackgroundImage {
+                         let badgeFrame = CGRect(x: nextBadgeX - badgeLayout.width, y: contentRect.maxY - badgeLayout.height + rightAccessoryVerticalOffset, width: badgeLayout.width, height: badgeLayout.height)
+                         

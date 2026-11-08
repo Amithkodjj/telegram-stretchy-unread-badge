@@ -1,0 +1,46 @@
+diff --git a/submodules/ChatListUI/Sources/ChatListController.swift b/submodules/ChatListUI/Sources/ChatListController.swift
+index 1ef2cfaf..f7f7753a 100644
+--- a/submodules/ChatListUI/Sources/ChatListController.swift
++++ b/submodules/ChatListUI/Sources/ChatListController.swift
+@@ -60,6 +60,7 @@ import SearchBarNode
+ import ChatListFilterTabContainerNode
+ import HeaderPanelContainerComponent
+ import HorizontalTabsComponent
++import TabBarComponent
+ import GlobalControlPanelsContext
+ import AlertComponent
+ import AlertHeaderComponent
+@@ -2447,6 +2448,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController
+     
+     override public func viewDidAppear(_ animated: Bool) {
+         super.viewDidAppear(animated)
++
++        self.installStretchyBadgeHandlers()
+                 
+         if self.powerSavingMonitoringDisposable == nil {
+             self.powerSavingMonitoringDisposable = (self.context.sharedContext.automaticMediaDownloadSettings
+@@ -4282,6 +4285,24 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController
+         })
+     }
+     
++    private func installStretchyBadgeHandlers() {
++        guard case .chatList(groupId: .root) = self.location else {
++            return
++        }
++        TabBarComponent.badgeDragPopped = { [weak self] tabBarItem in
++            guard let self, tabBarItem === self.tabBarItem else {
++                return
++            }
++            let _ = self.context.engine.messages.markAllChatsAsReadInteractively(items: [(groupId: .root, filterPredicate: nil)]).startStandalone()
++        }
++        HorizontalTabsComponent.badgeDragPopped = { [weak self] tabId in
++            guard let self, let filterId = tabId.base as? Int32, filterId != Int32.min else {
++                return
++            }
++            self.readAllInFilter(id: filterId)
++        }
++    }
++
+     private func readAllInFilter(id: Int32) {
+         for filter in self.chatListDisplayNode.mainContainerNode.availableFilters {
+             if case let .filter(filter) = filter, case let .filter(filterId, _, _, data) = filter, filterId == id {

@@ -1,0 +1,109 @@
+diff --git a/submodules/ChatListUI/Sources/ChatListControllerNode.swift b/submodules/ChatListUI/Sources/ChatListControllerNode.swift
+index bc6825e3..3750ff42 100644
+--- a/submodules/ChatListUI/Sources/ChatListControllerNode.swift
++++ b/submodules/ChatListUI/Sources/ChatListControllerNode.swift
+@@ -1621,6 +1621,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
+                                     title: "\(unread.value)",
+                                     isAccent: unread.hasUnmuted
+                                 )
++                                badge?.isDraggable = true
+                                 accessibilityValue = self.presentationData.strings.VoiceOver_Chat_UnreadMessages(Int32(clamping: unread.value))
+                             }
+                         }
+diff --git a/submodules/TelegramUI/Components/HorizontalTabsComponent/BUILD b/submodules/TelegramUI/Components/HorizontalTabsComponent/BUILD
+index 2eb39b07..3bb56009 100644
+--- a/submodules/TelegramUI/Components/HorizontalTabsComponent/BUILD
++++ b/submodules/TelegramUI/Components/HorizontalTabsComponent/BUILD
+@@ -22,6 +22,7 @@ swift_library(
+         "//submodules/Components/ComponentDisplayAdapters",
+         "//submodules/Components/MultilineTextWithEntitiesComponent",
+         "//submodules/TelegramUI/Components/LiquidLens",
++        "//submodules/TelegramUI/Components/StretchyBadge",
+         "//submodules/TelegramUI/Components/TextBadgeComponent",
+         "//submodules/TelegramUI/Components/HeaderPanelContainerComponent",
+     ],
+diff --git a/submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift b/submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift
+index ed83fb05..8ae0440c 100644
+--- a/submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift
++++ b/submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift
+@@ -7,6 +7,7 @@ import AccountContext
+ import TelegramCore
+ import MultilineTextWithEntitiesComponent
+ import TextBadgeComponent
++import StretchyBadge
+ import LiquidLens
+ import HeaderPanelContainerComponent
+ 
+@@ -209,10 +210,13 @@ func horizontalTabsFillSlotWidths(itemWidths: [CGFloat], availableWidth: CGFloat
+ }
+ 
+ public final class HorizontalTabsComponent: Component {
++    public static var badgeDragPopped: ((AnyHashable) -> Void)?
++
+     public final class Tab: Equatable {
+         public typealias Id = AnyHashable
+         
+         public struct Badge: Equatable {
++            public var isDraggable: Bool = false
+             public var title: String
+             public var isAccent: Bool
+             
+@@ -465,6 +469,11 @@ public final class HorizontalTabsComponent: Component {
+             self.accessibilityTraits = .tabBar
+             
+             self.addSubview(self.lensView)
++
++            let badgeDragRecognizer = StretchyBadgeDragRecognizer(targetAt: { [weak self] point in
++                return self?.stretchyBadgeTarget(at: point)
++            })
++            self.addGestureRecognizer(badgeDragRecognizer)
+             
+             self.lensView.contentView.addSubview(self.scrollView)
+             self.lensView.selectedContentView.addSubview(self.selectedScrollView)
+@@ -642,6 +651,33 @@ public final class HorizontalTabsComponent: Component {
+             self.lensView.setLiftedContainer(view: overlayContainerView)
+         }
+         
++        private func stretchyBadgeTarget(at point: CGPoint) -> StretchyBadgeDragRecognizer.Target? {
++            guard let component = self.component, let popped = HorizontalTabsComponent.badgeDragPopped else {
++                return nil
++            }
++            for tab in component.tabs where tab.badge?.isDraggable == true {
++                guard let itemView = self.itemViews[tab.id],
++                      let regular = itemView.regularView.view as? ItemComponent.View,
++                      let selected = itemView.selectedView.view as? ItemComponent.View,
++                      let regularBadge = regular.badge?.view,
++                      let selectedBadge = selected.badge?.view else {
++                    continue
++                }
++                let isSelected = component.selectedTab == tab.id
++                let badge: UIView = isSelected ? selectedBadge : regularBadge
++                let mirror: UIView = isSelected ? regularBadge : selectedBadge
++                let frame = regularBadge.convert(regularBadge.bounds, to: self).insetBy(dx: -12.0, dy: -12.0)
++                if frame.contains(point) {
++                    let color = tab.badge?.isAccent == true ? component.theme.list.itemCheckColors.fillColor : component.theme.chatList.unreadBadgeInactiveBackgroundColor
++                    let tabId = tab.id
++                    return StretchyBadgeDragRecognizer.Target(badge: badge, mirror: mirror, color: color, onPop: {
++                        popped(tabId)
++                    })
++                }
++            }
++            return nil
++        }
++
+         override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+             if !self.bounds.contains(point) {
+                 return nil
+@@ -1210,6 +1246,12 @@ private final class ItemComponent: Component {
+                 }
+                 component.tab.contextAction?(self.extractedContainerView, gesture)
+             }
++            self.containerView.shouldBegin = { [weak self] point in
++                guard let self, self.component?.tab.badge?.isDraggable == true, let badgeView = self.badge?.view else {
++                    return true
++                }
++                return !badgeView.convert(badgeView.bounds, to: self.containerView).insetBy(dx: -12.0, dy: -12.0).contains(point)
++            }
+             
+             self.extractedContainerView.willUpdateIsExtractedToContextPreview = { [weak self] isExtracted, transition in
+                 guard let self, let component else {

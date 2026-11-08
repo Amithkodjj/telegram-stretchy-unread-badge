@@ -1,0 +1,95 @@
+diff --git a/submodules/TelegramUI/Components/TabBarComponent/BUILD b/submodules/TelegramUI/Components/TabBarComponent/BUILD
+index a6655efb..c99cf28f 100644
+--- a/submodules/TelegramUI/Components/TabBarComponent/BUILD
++++ b/submodules/TelegramUI/Components/TabBarComponent/BUILD
+@@ -22,6 +22,7 @@ swift_library(
+         "//submodules/Components/BundleIconComponent",
+         "//submodules/UIKitRuntimeUtils",
+         "//submodules/TelegramUI/Components/LiquidLens",
++        "//submodules/TelegramUI/Components/StretchyBadge",
+         "//submodules/AppBundle",
+         "//submodules/SearchBarNode",
+         "//submodules/TelegramUI/Components/TabSelectionRecognizer",
+diff --git a/submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift b/submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift
+index 523cfcd0..12e05fa0 100644
+--- a/submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift
++++ b/submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift
+@@ -14,6 +14,7 @@ import AppBundle
+ import SearchBarNode
+ import TabSelectionRecognizer
+ import TabBarLayout
++import StretchyBadge
+ 
+ /// The items VoiceOver may reach: while search is active every item but the selected one is faded out.
+ func tabBarAccessibleItemIds<Id: Hashable>(ids: [Id], selectedId: Id?, isSearchActive: Bool) -> [Id] {
+@@ -348,6 +349,8 @@ private final class TabBarBadgeView: UIView {
+ }
+ 
+ public final class TabBarComponent: Component {
++    public static var badgeDragPopped: ((UITabBarItem) -> Void)?
++
+     public final class Item: Equatable {
+         public enum Content: Equatable {
+             public struct CustomItem: Equatable {
+@@ -614,11 +617,19 @@ public final class TabBarComponent: Component {
+             let tabSelectionRecognizer = TabSelectionRecognizer(target: self, action: #selector(self.onTabSelectionGesture(_:)))
+             self.tabSelectionRecognizer = tabSelectionRecognizer
+             self.contextGestureContainerView.addGestureRecognizer(tabSelectionRecognizer)
++
++            let badgeDragRecognizer = StretchyBadgeDragRecognizer(targetAt: { [weak self] point in
++                return self?.stretchyBadgeTarget(at: point)
++            })
++            self.contextGestureContainerView.addGestureRecognizer(badgeDragRecognizer)
+             
+             self.contextGestureContainerView.shouldBegin = { [weak self] point in
+                 guard let self, let component = self.component else {
+                     return false
+                 }
++                if self.stretchyBadgeTarget(at: point) != nil {
++                    return false
++                }
+                 
+                 if let itemId = self.item(at: point) {
+                     guard let item = component.items.first(where: { $0.id == itemId }) else {
+@@ -687,6 +698,32 @@ public final class TabBarComponent: Component {
+             return true
+         }
+ 
++        private func stretchyBadgeTarget(at point: CGPoint) -> StretchyBadgeDragRecognizer.Target? {
++            guard let component = self.component, let popped = TabBarComponent.badgeDragPopped else {
++                return nil
++            }
++            for item in component.items {
++                guard case let .tabBarItem(tabBarItem) = item.content,
++                      let regular = self.itemViews[item.id]?.view as? ItemComponent.View,
++                      let selected = self.selectedItemViews[item.id]?.view as? ItemComponent.View,
++                      let regularBadge = regular.badge,
++                      let selectedBadge = selected.badge else {
++                    continue
++                }
++                // The lens shows the selected copy of the selected tab and the regular copy of the others.
++                let isSelected = (self.overrideSelectedItemId ?? component.selectedId) == item.id
++                let badge: UIView = isSelected ? selectedBadge : regularBadge
++                let mirror: UIView = isSelected ? regularBadge : selectedBadge
++                let frame = badge.convert(badge.bounds, to: self.contextGestureContainerView).insetBy(dx: -22.0, dy: -20.0)
++                if frame.contains(point) {
++                    return StretchyBadgeDragRecognizer.Target(badge: badge, mirror: mirror, color: badge.backgroundColor ?? .systemRed, onPop: {
++                        popped(tabBarItem)
++                    })
++                }
++            }
++            return nil
++        }
++
+         @objc private func onTabSelectionGesture(_ recognizer: TabSelectionRecognizer) {
+             guard let component = self.component else {
+                 return
+@@ -1221,7 +1258,7 @@ private final class ItemComponent: Component {
+         private var imageIcon: ComponentView<Empty>?
+         private var animationIcon: ComponentView<Empty>?
+         private let title = ComponentView<Empty>()
+-        private var badge: TabBarBadgeView?
++        fileprivate var badge: TabBarBadgeView?
+         
+         private var component: ItemComponent?
+         private weak var state: EmptyComponentState?
